@@ -80,6 +80,9 @@ int main(void) {
             failures += expect_u32(c->name, "pc", cpu.pc, 0x81010068u);
         } else if (!strcmp(c->name, "blr")) {
             failures += expect_u32(c->name, "pc", cpu.pc, 0x81234564u);
+        } else if (!strcmp(c->name, "blrl")) {
+            failures += expect_u32(c->name, "pc", cpu.pc, 0x81234564u);
+            failures += expect_u32(c->name, "lr", cpu.lr, c->address + 4u);
         } else if (!strcmp(c->name, "bctr")) {
             failures += expect_u32(c->name, "pc", cpu.pc, 0x82345678u);
         } else if (!strcmp(c->name, "tw") || !strcmp(c->name, "twi")) {

@@ -36,6 +36,7 @@ static const DedicatedCase dedicated_cases[] = {
     {"icbi",    0x7C14AFACu, 0x8101005Cu},
     {"eciwx",   0x7ED4AA6Cu, 0x81010060u},
     {"ecowx",   0x7EF4AB6Cu, 0x81010064u},
+    {"blrl",    0x4E800021u, 0x81010068u},
 };
 
 static const unsigned dedicated_case_count =

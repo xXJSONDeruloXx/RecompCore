@@ -3,10 +3,14 @@
 #include <stdio.h>
 
 static void emit_dynamic_branch(FILE* out, const PPCInst* inst, const char* target_expr) {
+    // Branch-and-link through LR must use LR's value from before the link update.
+    // Snapshot every dynamic target first so bclrl/blrl cannot branch to their
+    // own return address after writing the new LR.
+    fprintf(out, "            u32 target = %s;\n", target_expr);
     if (inst->lk) {
         fprintf(out, "            ctx->lr = 0x%08Xu;\n", inst->address + 4);
     }
-    fprintf(out, "            ctx->pc = %s;\n", target_expr);
+    fprintf(out, "            ctx->pc = target;\n");
     fprintf(out, "            return;\n");
 }
 
