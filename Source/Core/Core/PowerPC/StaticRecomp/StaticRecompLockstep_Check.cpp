@@ -36,8 +36,8 @@ bool LsIsLoopHeader(const u8* ram, u32 ram_size, u32 end_pc)
     const u32 insn = Common::swap32(&ram[off]);
     const u32 opcd = insn >> 26;
     const u32 addr = end_pc + i * 4u;
-    if (addr <= end_pc)
-      continue;
+    // Include the instruction at end_pc: counted delay loops commonly use
+    // `bdnz .`, so the dispatch both starts and yields at the same address.
     if (opcd == 16u && (insn & 0x2u) == 0u)  // bc: B-form, 14-bit signed BD, AA=0
     {
       const s32 bd = static_cast<s32>(static_cast<s16>(insn & 0xFFFCu));
@@ -175,7 +175,10 @@ void StaticRecompLockstepVerifier::LockstepCheck(u32 entry_pc, u32 end_pc, const
                    steps, before, ppc.gpr[3], ppc.gpr[4], ppc.gpr[5], ppc.msr.Hex,
                    ppc.GetXER().Hex, ppc.cr.Get(), ppc.spr[SPR_LR], ppc.spr[SPR_CTR]);
     }
-    if (ppc.pc == end_pc)
+    // A native dispatch can consume several iterations before yielding at a loop header.
+    // Do not compare that state with the interpreter's first arrival at the same PC;
+    // replay until the shadow has consumed the cycles charged by the native dispatch.
+    if (ppc.pc == end_pc && (!end_is_loop_header || interp_cycles >= native_charge))
       break;
     if (ppc.Exceptions != 0)
       break;

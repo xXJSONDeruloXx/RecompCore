@@ -3,7 +3,9 @@
 
 #include "Core/PowerPC/StaticRecomp/StaticRecompCore.h"
 
+#include <algorithm>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
 #include "Common/Config/Config.h"
@@ -109,6 +111,11 @@ void StaticRecompCore::Init()
 
   LoadModule();
   m_idle_pc = Config::Get(Config::MAIN_STATICRECOMP_IDLE_PC);
+  const char* profile_dispatches = std::getenv("STATICRECOMP_PROFILE_DISPATCH");
+  m_profile_dispatches = profile_dispatches && profile_dispatches[0] != '\0' &&
+                         profile_dispatches[0] != '0';
+  std::fprintf(stderr, "[staticrecomp] idle_pc=0x%08X profile_dispatch=%u\n", m_idle_pc,
+               m_profile_dispatches ? 1u : 0u);
   m_lockstep_verifier = std::make_unique<StaticRecompLockstep::StaticRecompLockstepVerifier>(*this);
   m_lockstep_verifier->Init();
 
@@ -131,6 +138,18 @@ void StaticRecompCore::Shutdown()
                (unsigned long long)m_native_exceptions,
                (unsigned long long)m_hook_fallback_instructions, m_failed_chunks,
                (unsigned long long)m_verifications, (unsigned long long)m_reverify_events);
+  if (m_profile_dispatches)
+  {
+    std::vector<std::pair<u64, u32>> profile;
+    profile.reserve(m_dispatch_profile.size());
+    for (const auto& [pc, samples] : m_dispatch_profile)
+      profile.emplace_back(samples, pc);
+    std::ranges::sort(profile, std::greater{});
+    const size_t count = std::min<size_t>(16, profile.size());
+    for (size_t i = 0; i < count; ++i)
+      std::fprintf(stderr, "[staticrecomp] hot_pc[%zu]=0x%08X samples=%llu\n", i,
+                   profile[i].second, (unsigned long long)profile[i].first);
+  }
   NOTICE_LOG_FMT(POWERPC,
                  "StaticRecomp: shutdown. native_dispatches={} fallback_steps={} "
                  "native_exceptions={} hook_fallback_instructions={} smc_failed_chunks={} "

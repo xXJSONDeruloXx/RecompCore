@@ -45,6 +45,10 @@ void StaticRecompCore::Run()
   while (*state_ptr == CPU::State::Running)
   {
     core_timing.Advance();
+    // CoreTiming events only set pending asynchronous exception bits. JIT dispatchers
+    // explicitly deliver them after advancing the slice; native dispatch has no such
+    // branch hook, so do it here before re-entering recompiled code.
+    power_pc.CheckExternalExceptions();
     const std::string current_game_id = SConfig::GetInstance().GetGameID();
     m_module_active = m_module && (current_game_id.empty() || current_game_id == m_module->game_id);
 
@@ -64,8 +68,11 @@ void StaticRecompCore::Run()
             m_lockstep_verifier->Prepare(m_guest);
           }
 
-          m_module->dispatch(&m_guest, m_guest.pc);
+          const u32 dispatch_pc = m_guest.pc;
+          m_module->dispatch(&m_guest, dispatch_pc);
           ++m_native_dispatches;
+          if (m_profile_dispatches && (m_native_dispatches & 0x3FFu) == 0)
+            ++m_dispatch_profile[dispatch_pc];
 
           if (do_ls)
           {
@@ -112,21 +119,16 @@ void StaticRecompCore::Run()
       }
       else
       {
-        // SingleStepInner delivers synchronous exceptions itself; external
-        // interrupts are delivered at slice start, as in Interpreter::Run.
-        if (m_fallback_jit)
+        // Run only the uncovered vector/stub, then hand control back as soon as
+        // the PC re-enters module coverage. JitBase::Run() is an unbounded CPU
+        // loop and cannot be used here: after the first exception vector it
+        // would permanently take over execution from the static module.
+        do
         {
-          m_fallback_jit->Run();
-        }
-        else
-        {
-          do
-          {
-            ppc.downcount -= interpreter.SingleStepInner();
-            ++m_fallback_steps;
-          } while (!(m_module_active && DispatchableAt(ppc.pc)) && ppc.downcount > 0 &&
-                   *state_ptr == CPU::State::Running);
-        }
+          ppc.downcount -= interpreter.SingleStepInner();
+          ++m_fallback_steps;
+        } while (!(m_module_active && DispatchableAt(ppc.pc)) && ppc.downcount > 0 &&
+                 *state_ptr == CPU::State::Running);
       }
     } while (ppc.downcount > 0 && *state_ptr == CPU::State::Running);
   }

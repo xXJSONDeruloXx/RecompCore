@@ -149,6 +149,8 @@ private:
   u64 m_hook_fallback_instructions = 0;
   u64 m_bursts = 0;          // SyncIn..SyncOut native runs (diagnostic)
   u64 m_charged_cycles = 0;  // cycles flushed from module charges (diagnostic)
+  bool m_profile_dispatches = false;
+  std::unordered_map<u32, u64> m_dispatch_profile;
 
   // D4 guard state: parallel to m_module->chunk_ranges.
   std::vector<u8> m_chunk_state;
