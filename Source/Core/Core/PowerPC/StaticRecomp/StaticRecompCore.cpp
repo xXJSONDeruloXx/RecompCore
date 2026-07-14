@@ -110,11 +110,18 @@ void StaticRecompCore::Init()
   std::fprintf(stderr, "[staticrecomp] core init\n");
 
   LoadModule();
-  m_idle_pc = Config::Get(Config::MAIN_STATICRECOMP_IDLE_PC);
+  m_idle_pcs = {
+      Config::Get(Config::MAIN_STATICRECOMP_IDLE_PC),
+      Config::Get(Config::MAIN_STATICRECOMP_IDLE_PC2),
+      Config::Get(Config::MAIN_STATICRECOMP_IDLE_PC3),
+      Config::Get(Config::MAIN_STATICRECOMP_IDLE_PC4),
+  };
   const char* profile_dispatches = std::getenv("STATICRECOMP_PROFILE_DISPATCH");
   m_profile_dispatches = profile_dispatches && profile_dispatches[0] != '\0' &&
                          profile_dispatches[0] != '0';
-  std::fprintf(stderr, "[staticrecomp] idle_pc=0x%08X profile_dispatch=%u\n", m_idle_pc,
+  std::fprintf(stderr,
+               "[staticrecomp] idle_pcs=0x%08X,0x%08X,0x%08X,0x%08X profile_dispatch=%u\n",
+               m_idle_pcs[0], m_idle_pcs[1], m_idle_pcs[2], m_idle_pcs[3],
                m_profile_dispatches ? 1u : 0u);
   m_lockstep_verifier = std::make_unique<StaticRecompLockstep::StaticRecompLockstepVerifier>(*this);
   m_lockstep_verifier->Init();
@@ -140,15 +147,32 @@ void StaticRecompCore::Shutdown()
                (unsigned long long)m_verifications, (unsigned long long)m_reverify_events);
   if (m_profile_dispatches)
   {
-    std::vector<std::pair<u64, u32>> profile;
-    profile.reserve(m_dispatch_profile.size());
-    for (const auto& [pc, samples] : m_dispatch_profile)
-      profile.emplace_back(samples, pc);
-    std::ranges::sort(profile, std::greater{});
+    std::vector<std::pair<u32, DispatchProfile>> profile(m_dispatch_profile.begin(),
+                                                         m_dispatch_profile.end());
+    std::ranges::sort(profile, [](const auto& lhs, const auto& rhs) {
+      return lhs.second.samples > rhs.second.samples;
+    });
     const size_t count = std::min<size_t>(16, profile.size());
     for (size_t i = 0; i < count; ++i)
-      std::fprintf(stderr, "[staticrecomp] hot_pc[%zu]=0x%08X samples=%llu\n", i,
-                   profile[i].second, (unsigned long long)profile[i].first);
+    {
+      const auto& [pc, sample] = profile[i];
+      const u64 average_ns = sample.samples != 0 ? sample.total_ns / sample.samples : 0;
+      std::fprintf(stderr,
+                   "[staticrecomp] hot_pc[%zu]=0x%08X samples=%llu avg_ns=%llu max_ns=%llu\n",
+                   i, pc, (unsigned long long)sample.samples, (unsigned long long)average_ns,
+                   (unsigned long long)sample.max_ns);
+    }
+
+    std::ranges::sort(profile, [](const auto& lhs, const auto& rhs) {
+      return lhs.second.total_ns > rhs.second.total_ns;
+    });
+    for (size_t i = 0; i < count; ++i)
+    {
+      const auto& [pc, sample] = profile[i];
+      std::fprintf(stderr, "[staticrecomp] slow_pc[%zu]=0x%08X total_ns=%llu samples=%llu\n", i,
+                   pc, (unsigned long long)sample.total_ns,
+                   (unsigned long long)sample.samples);
+    }
   }
   NOTICE_LOG_FMT(POWERPC,
                  "StaticRecomp: shutdown. native_dispatches={} fallback_steps={} "

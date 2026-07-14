@@ -2,9 +2,11 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "Core/PowerPC/StaticRecomp/StaticRecompCore.h"
+#include "Core/PowerPC/StaticRecomp/StaticRecompLockstep.h"
 #include "Core/System.h"
 #include "Core/PowerPC/PowerPC.h"
 #include "Core/HW/SystemTimers.h"
+#include "Core/Config/MainSettings.h"
 #include <cstring>
 
 void StaticRecompCore::SetPPCStateFromGuestState(const CPUState& s, PowerPC::PowerPCState& ppc)
@@ -72,6 +74,14 @@ void StaticRecompCore::SyncIn()
   m_guest.exception = 0;
   m_guest.program_exception = 0;
   m_guest.downcount = 0;  // charge accumulator, not a copy of ppc.downcount
+  m_guest.runtime_flags = 0;
+  // Match Dolphin JIT's default FP tradeoff. Exact semantics remain active for
+  // differential verification, AccurateNaNs, and dynamically enabled guest FP
+  // exceptions; FPRF is only maintained when its matching Dolphin option is on.
+  if (!m_lockstep_verifier->IsEnabled() && !Config::Get(Config::MAIN_ACCURATE_NANS))
+    m_guest.runtime_flags |= PPC_RUNTIME_FAST_FP;
+  if (Config::Get(Config::MAIN_FPRF))
+    m_guest.runtime_flags |= PPC_RUNTIME_FPRF;
 
   if (m_module && m_module->on_state_loaded)
     m_module->on_state_loaded(&m_guest);

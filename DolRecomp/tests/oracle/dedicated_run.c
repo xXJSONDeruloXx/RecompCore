@@ -48,7 +48,7 @@ int main(void) {
         cpu.instruction_fallback = env_fallback;
         cpu.pc = c->address;
         cpu.lr = 0x81234567u;
-        cpu.ctr = 0x82345678u;
+        cpu.ctr = !strcmp(c->name, "bdnz_self") ? 65u : 0x82345678u;
         cpu.cr = 0x20000000u;
         cpu.msr = 0x0000B032u;
         cpu.srr0 = 0x81230002u;
@@ -85,6 +85,9 @@ int main(void) {
             failures += expect_u32(c->name, "lr", cpu.lr, c->address + 4u);
         } else if (!strcmp(c->name, "bctr")) {
             failures += expect_u32(c->name, "pc", cpu.pc, 0x82345678u);
+        } else if (!strcmp(c->name, "bdnz_self")) {
+            failures += expect_u32(c->name, "pc", cpu.pc, c->address + 4u);
+            failures += expect_u32(c->name, "ctr", cpu.ctr, 0u);
         } else if (!strcmp(c->name, "tw") || !strcmp(c->name, "twi")) {
             failures += expect_u32(c->name, "exception", cpu.exception, PPC_EXC_PROGRAM);
             failures += expect_u32(c->name, "program", cpu.program_exception, PPC_PROGRAM_TRAP);

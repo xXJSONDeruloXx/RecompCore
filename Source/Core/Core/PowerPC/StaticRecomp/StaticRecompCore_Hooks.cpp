@@ -192,9 +192,10 @@ void StaticRecompCore::HookInstructionFallback(CPUState* cpu, u32 raw, u32 cia)
       {
         system.GetJitInterface().InvalidateICacheLine(ea);
       }
-      // These bypass SingleStepInner, so charge Dolphin's PPCTables cost
-      // here (icbi 4, dcbf/dcbst/dcbi 5); their emitted block cost is zero.
-      ppc.downcount -= (xo == 982u) ? 4 : 5;
+      // These bypass SingleStepInner, so add Dolphin's PPCTables cost to the
+      // native charge accumulator (icbi 4, dcbf/dcbst/dcbi 5). This also keeps
+      // bounded native backedges on their real cycle budget.
+      cpu->downcount -= (xo == 982u) ? 4 : 5;
       cpu->pc = cia + 4u;
       return;
     }

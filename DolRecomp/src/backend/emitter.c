@@ -282,6 +282,12 @@ void emit_direct_branch(FILE* out, const PPCInst* inst, bool local_target) {
         return;
     }
     if (local_backward) {
+        // Keep tight loops inside one native call for a bounded cycle burst.
+        // The accumulated charge starts at zero for each dispatch, so yielding
+        // after 256 cycles preserves frequent CoreTiming/interrupt checks while
+        // avoiding a host dispatcher round trip on every guest iteration.
+        fprintf(out, "            if (ctx->downcount > -256) goto label_%08X;\n",
+                inst->branch_target);
         fprintf(out, "            ctx->pc = 0x%08Xu;\n", inst->branch_target);
         fprintf(out, "            return;\n");
     } else if (local_target) {

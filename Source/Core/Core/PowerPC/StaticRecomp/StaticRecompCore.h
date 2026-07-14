@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <array>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -149,8 +150,19 @@ private:
   u64 m_hook_fallback_instructions = 0;
   u64 m_bursts = 0;          // SyncIn..SyncOut native runs (diagnostic)
   u64 m_charged_cycles = 0;  // cycles flushed from module charges (diagnostic)
+  struct DispatchProfile
+  {
+    u64 samples = 0;
+    u64 total_ns = 0;
+    u64 max_ns = 0;
+  };
   bool m_profile_dispatches = false;
-  std::unordered_map<u32, u64> m_dispatch_profile;
+  std::unordered_map<u32, DispatchProfile> m_dispatch_profile;
+  std::unordered_map<u32, DispatchProfile> m_dispatch_profile_window;
+  u64 m_profile_window_start_ns = 0;
+  u64 m_profile_window_native_start = 0;
+  u64 m_profile_window_fallback_start = 0;
+  u64 m_profile_window_hook_start = 0;
 
   // D4 guard state: parallel to m_module->chunk_ranges.
   std::vector<u8> m_chunk_state;
@@ -169,7 +181,7 @@ private:
   // last hit short-circuits the chunk binary search on the hot path.
   mutable u32 m_last_chunk_index = 0;
 
-  u32 m_idle_pc = 0;
+  std::array<u32, 4> m_idle_pcs{};
 };
 
 extern StaticRecompCore* g_static_recomp_core;

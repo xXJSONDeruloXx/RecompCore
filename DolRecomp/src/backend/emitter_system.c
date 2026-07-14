@@ -62,7 +62,8 @@ bool emit_system_instruction(FILE* out, const PPCInst* inst, u32 func_start, u32
          * fallback so the host can invalidate any recompiled coverage. */
         fprintf(out, "    ppc_fallback_instruction(ctx, 0x%08Xu, 0x%08Xu);\n",
                 inst->raw, inst->address);
-        fprintf(out, "    return;\n");
+        fprintf(out, "    if (ctx->exception || ctx->pc != 0x%08Xu) return;\n",
+                inst->address + 4u);
         return true;
 
     case PPC_OP_CRAND:  emit_cr_logical(out, inst, "a & b"); break;

@@ -27,7 +27,7 @@
 #include <stdio.h>
 #include <string.h>
 
-_Static_assert(GXRUNTIME_CPU_ABI_VERSION == 2u,
+_Static_assert(GXRUNTIME_CPU_ABI_VERSION == 3u,
                "update runtime ABI tests when the CPU ABI changes");
 _Static_assert(GXRUNTIME_CPU_ABI_DOLRECOMP_PREFIX == 1u,
                "GXRuntime generated-code prefix must stay explicit");
@@ -46,9 +46,11 @@ _Static_assert(offsetof(CPUState, ram) > offsetof(CPUState, external_user_data),
 _Static_assert(offsetof(CPUState, external_pointer) > offsetof(CPUState, ram_size),
                "GXRuntime external_pointer must remain a tail extension");
 _Static_assert(offsetof(CPUState, downcount) > offsetof(CPUState, external_pointer),
-               "ABI v2 downcount must remain the tail field");
+               "ABI v2 downcount must remain after external_pointer");
 _Static_assert(sizeof(((CPUState*)0)->downcount) == 8u,
                "downcount is s64 so unconsumed charges cannot wrap");
+_Static_assert(offsetof(CPUState, runtime_flags) > offsetof(CPUState, exram_size),
+               "ABI v3 runtime flags must remain the tail field");
 _Static_assert(sizeof(((CPUState*)0)->gpr) / sizeof(((CPUState*)0)->gpr[0]) == 32u,
                "generated code requires 32 GPRs");
 _Static_assert(sizeof(((CPUState*)0)->fpr) / sizeof(((CPUState*)0)->fpr[0]) == 32u,
@@ -2199,7 +2201,46 @@ static void test_savestate_roundtrip(void) {
     cpu_free(&cpu);
 }
 
+static void test_fast_fp_paths(void) {
+    CPUState cpu = {0};
+    cpu.runtime_flags = PPC_RUNTIME_FAST_FP;
+    cpu.fpr[1] = 2.0;
+    cpu.ps1[1] = 3.0;
+    cpu.fpr[2] = 4.0;
+    cpu.ps1[2] = 5.0;
+    cpu.fpr[3] = 0.5;
+    cpu.ps1[3] = 0.25;
+
+    ppc_ps_muls0(&cpu, 4, 1, 3);
+    assert(cpu.fpr[4] == 1.0);
+    assert(cpu.ps1[4] == 1.5);
+    assert(cpu.fpscr == 0); // FPRF disabled, matching Dolphin's default.
+
+    ppc_ps_madds0(&cpu, 5, 1, 3, 2);
+    assert(cpu.fpr[5] == 5.0);
+    assert(cpu.ps1[5] == 6.5);
+    assert(cpu.fpscr == 0);
+
+    ppc_fmadd_op(&cpu, 6, 1, 3, 2, true, false, false);
+    assert(cpu.fpr[6] == 5.0);
+    assert(cpu.ps1[6] == 5.0);
+
+    cpu.runtime_flags |= PPC_RUNTIME_FPRF;
+    ppc_ps_add_op(&cpu, 7, 1, 2);
+    assert(cpu.fpr[7] == 6.0);
+    assert(cpu.ps1[7] == 8.0);
+    assert((cpu.fpscr & (0x1Fu << 12)) == (0x04u << 12));
+
+    // Dynamically enabled FP exceptions force the exact semantics even when
+    // the embedding environment selected fast FP.
+    cpu.runtime_flags = PPC_RUNTIME_FAST_FP;
+    cpu.fpscr = 0x80u;
+    ppc_ps_add_op(&cpu, 7, 1, 2);
+    assert((cpu.fpscr & (0x1Fu << 12)) == (0x04u << 12));
+}
+
 int main(void) {
+    test_fast_fp_paths();
     test_guest_memory();
     test_savestate_roundtrip();
     test_gx_recomp_modules();

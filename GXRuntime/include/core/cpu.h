@@ -27,7 +27,9 @@
 //   consumes and resets it (Dolphin chassis: per-dispatch flush into
 //   ppc_state.downcount). Hosts that do not meter guest time may ignore it
 //   (s64: it cannot wrap in any realistic session).
-#define GXRUNTIME_CPU_ABI_VERSION 2u
+// - ABI v3 adds `runtime_flags` at the tail. Embedders use this to select
+//   optional execution semantics such as Dolphin-compatible fast FP.
+#define GXRUNTIME_CPU_ABI_VERSION 3u
 #define GXRUNTIME_CPU_ABI_DOLRECOMP_PREFIX 1u
 #define GXRUNTIME_CPU_ABI_EXTERNAL_POINTER_EXTENSION 1u
 
@@ -83,6 +85,9 @@
 
 #define PPC_EAR_ENABLE 0x80000000u
 #define PPC_SRR1_MACHINE_CHECK_DCBZL PPC_BIT(10)
+
+#define PPC_RUNTIME_FAST_FP 0x00000001u
+#define PPC_RUNTIME_FPRF    0x00000002u
 
 typedef struct CPUState CPUState;
 
@@ -142,6 +147,7 @@ struct CPUState {
     s64 downcount;
     u8* exram;
     u32 exram_size;
+    u32 runtime_flags;
 };
 
 #include <stdio.h>
